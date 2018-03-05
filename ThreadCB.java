@@ -191,7 +191,24 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
     */
     public void do_suspend(Event event)
     {
-        // your code goes here
+        int status = this.getStatus();
+
+        if(status == ThreadRunning){
+            this.setStatus(ThreadWaiting);
+            PageTable pageTable= MMU.getPTBR();
+            TaskCB currentTask = pageTable.getTask();
+            currentTask.setCurrentThread(null);
+            MMU.setPTBR(null);
+        }
+        else if(status >= ThreadWaiting)
+            this.setStatus(status+1);
+
+        //Put thread in the appropriate waiting queue of the event
+        if(!event.contains(this))
+            event.addThread(this);
+
+        ThreadCB.dispatch();
+
 
     }
 
@@ -206,7 +223,15 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
     */
     public void do_resume()
     {
-        // your code goes here
+        int status = this.getStatus();
+        if(status > ThreadWaiting)
+            this.setStatus(status-1);
+        else if(status == ThreadWaiting){
+            TaskCB task = this.getTask();
+
+            /*Traverse through all the task(i.e. the hashmap) and look at the head of every task queue.
+            Set the currently resumed thread's priority to highest priority and put it in the appropriate task queue*/
+        }
 
     }
 

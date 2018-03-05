@@ -4,7 +4,7 @@ import osp.IFLModules.*;
 import osp.Utilities.*;
 import osp.Hardware.*;
 
-/**    
+/*    
        The timer interrupt handler.  This class is called upon to
        handle timer interrupts.
 
@@ -12,7 +12,7 @@ import osp.Hardware.*;
 */
 public class TimerInterruptHandler extends IflTimerInterruptHandler
 {
-    /**
+    /*
        This basically only needs to reset the times and dispatch
        another process.
 

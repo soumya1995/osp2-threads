@@ -9,16 +9,23 @@ import osp.Hardware.*;
 import osp.Devices.*;
 import osp.Memory.*;
 import osp.Resources.*;
+import java.util.*;
 
-/**
+
+/*
    This class is responsible for actions related to threads, including
    creating, killing, dispatching, resuming, and suspending threads.
 
    @OSPProject Threads
 */
-public class ThreadCB extends IflThreadCB 
-{
-    /**
+public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
+{   
+
+    private static HashMap<Integer, List<ThreadCB>> taskTable; //TaskTable has linked list which acts as the ready queue
+    private long entryTimeInQueue;
+
+
+    /*
        The thread constructor. Must call 
 
        	   super();
@@ -27,13 +34,18 @@ public class ThreadCB extends IflThreadCB
 
        @OSPProject Threads
     */
+
+    
+
     public ThreadCB()
     {
         // your code goes here
 
+        super();
+
     }
 
-    /**
+    /*
        This method will be called once at the beginning of the
        simulation. The student can set up static variables here.
        
@@ -42,10 +54,11 @@ public class ThreadCB extends IflThreadCB
     public static void init()
     {
         // your code goes here
+        taskTable = new HashMap<Integer, List<ThreadCB>>();
 
     }
 
-    /** 
+    /* 
         Sets up a new thread and adds it to the given task. 
         The method must set the ready status 
         and attempt to add thread to task. If the latter fails 
@@ -64,11 +77,50 @@ public class ThreadCB extends IflThreadCB
     */
     static public ThreadCB do_create(TaskCB task)
     {
-        // your code goes here
+
+        ThreadCB newThread = null;
+
+        if(task == null || task.getThreadCount() > IflThreadCB.MaxThreadsPerTask){
+            ThreadCB.dispatch();
+            return null;
+        }
+
+        newThread = new ThreadCB();
+
+        if(task.addThread(newThread) == FAILURE){
+            ThreadCB.dispatch();
+            return null;
+        }
+        newThread.setTask(task);
+
+        
+        newThread.setStatus(ThreadReady); //Set status to thread ready
+
+        /*Put the thread in the TaskTable
+        TaskTable has linked list which acts as the ready queue; the head of the queue has the highest priority thread in the group 
+        i.e. in that task*/
+        List<ThreadCB> threadList = taskTable.get(task.getID());
+        if(threadList == null)
+            taskTable.put(task.getID(), threadList = new ArrayList<ThreadCB>());
+        threadList.add(newThread);
+
+        //Store the time when a thread was inserted in the ready queue
+        newThread.entryTimeInQueue = HClock.get();
+
+        //Set priority of the newly created thread
+        double priority = (1.5*(HClock.get()-newThread.getEntryTimeInQueue()))-(newThread.getTimeOnCPU())-(0.3*getAllCPUTime(task));
+        newThread.setPriority((int)priority);
+
+        //After assigning priority put the thread in the apporiate place in the queue
+        Collections.sort(threadList, Collections.reverseOrder());
+
+        ThreadCB.dispatch();
+        return newThread;
+
 
     }
 
-    /** 
+    /* 
 	Kills the specified thread. 
 
 	The status must be set to ThreadKill, the thread must be
@@ -82,8 +134,32 @@ public class ThreadCB extends IflThreadCB
 	@OSPProject Threads
     */
     public void do_kill()
-    {
-        // your code goes here
+    {   
+        int status = this.getStatus();
+
+        //Thread is in the ready queue
+        if(status == ThreadReady){
+            TaskCB task = this.getTask();
+            List<ThreadCB> threadList = taskTable.get(task.getID());
+            threadList.remove(this); //Remove the thread from ready queue
+            task.removeThread(this);
+        }
+
+        if(status == ThreadRunning){
+            PageTable pageTable= MMU.getPTBR();
+            TaskCB currentTask = pageTable.getTask();
+            currentTask.setCurrentThread(null);
+            MMU.setPTBR(null);
+        }
+        //Thread is suspended or waiting for I/O
+        if(status == ThreadWaiting){
+            
+        }
+
+        //Set status to thread kill/destroyed
+        this.setStatus(ThreadKill); 
+
+        ThreadCB.dispatch();
 
     }
 
@@ -124,7 +200,7 @@ public class ThreadCB extends IflThreadCB
 
     }
 
-    /** 
+    /* 
         Selects a thread from the run queue and dispatches it. 
 
         If there is just one theread ready to run, reschedule the thread 
@@ -140,10 +216,48 @@ public class ThreadCB extends IflThreadCB
     public static int do_dispatch()
     {
         // your code goes here
+        return 0;
 
     }
 
-    /**
+    /*
+        Called whenever we require to get the total CPU time all the threads in the same task.
+    */
+    private static double getAllCPUTime(TaskCB task){
+
+        double totalTime = 0;
+
+        if(task == null)
+            return -1;
+
+        List<ThreadCB> threadList = taskTable.get(task.getID());
+        for(ThreadCB thread: threadList)
+            totalTime = totalTime + thread.getTimeOnCPU();
+        
+        return totalTime;
+    }
+
+    public long getEntryTimeInQueue(){
+
+        return this.entryTimeInQueue;
+    }
+
+    public void setEntryTimeInQueue(long time){
+
+        this.entryTimeInQueue = time;
+    }
+
+    public int compareTo(ThreadCB thread){
+
+        if(this.getPriority()>thread.getPriority())
+            return 1;
+        if(this.getPriority()<thread.getPriority())
+            return -1;
+        return 0;
+    }
+
+
+    /*
        Called by OSP after printing an error message. The student can
        insert code here to print various tables and data structures in
        their state just after the error happened.  The body can be

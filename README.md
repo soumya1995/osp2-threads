@@ -1,6 +1,6 @@
 # OS Thread Management
 
-This is a thread management module for the [OSP2](http://cdn.iiit.ac.in/cdn/enhanceedu.iiit.ac.in/wiki/images/OSP2_Manual.pdf) Operating system.
+This is a thread management module for the [OSP2 target="blank"](http://cdn.iiit.ac.in/cdn/enhanceedu.iiit.ac.in/wiki/images/OSP2_Manual.pdf) Operating system.
 ## Thread Scheduling
 Thread are scheduled according to their priority. Threads with the same priority are to
 be scheduled according to the time they were inserted in the ready queue.

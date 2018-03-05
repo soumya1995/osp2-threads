@@ -1,5 +1,5 @@
 Sim: 0 [EventEngine.EventDriver]  
-	Simulation Start Time: Sun Mar 04 19:40:04 EST 2018
+	Simulation Start Time: Mon Mar 05 00:33:23 EST 2018
 	Parameter file: Misc\params.osp
 
 	Legend:
@@ -3519,8 +3519,8 @@ The suspended  RRBs:
 -----------------------------------------------
 
 Sim: 250006 [EventEngine.EventDriver]  
-	Simulation End Time: Sun Mar 04 19:40:06 EST 2018
+	Simulation End Time: Mon Mar 05 00:33:25 EST 2018
 
 Sim: 250006 [Utilities.Simulation]  
-	Elapsed time: 1 seconds
+	Elapsed time: 2 seconds
 

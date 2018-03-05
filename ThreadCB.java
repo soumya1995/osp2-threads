@@ -136,10 +136,10 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
     public void do_kill()
     {   
         int status = this.getStatus();
+        TaskCB task = this.getTask();
 
         //Thread is in the ready queue
         if(status == ThreadReady){
-            TaskCB task = this.getTask();
             List<ThreadCB> threadList = taskTable.get(task.getID());
             threadList.remove(this); //Remove the thread from ready queue
             task.removeThread(this);
@@ -153,11 +153,21 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
         }
         //Thread is suspended or waiting for I/O
         if(status == ThreadWaiting){
-            
+            for(int i=0; i< Device.getTableSize();i++){
+                Device device = Device.get(i);
+                device.cancelPendingIO(this);
+            }
         }
 
-        //Set status to thread kill/destroyed
-        this.setStatus(ThreadKill); 
+        //Kill the thread, give up resources and remove it from its corresponding task
+        this.setStatus(ThreadKill);
+        ResourceCB.giveupResources(this);
+        task.removeThread(this);
+        
+        //A task with no threads is dead, so kill it
+        if(task.getThreadCount() <= 0)
+            task.kill();
+ 
 
         ThreadCB.dispatch();
 
@@ -216,6 +226,7 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
     public static int do_dispatch()
     {
         // your code goes here
+        
         return 0;
 
     }

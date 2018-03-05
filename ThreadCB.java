@@ -230,8 +230,27 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
             TaskCB task = this.getTask();
 
             /*Traverse through all the task(i.e. the hashmap) and look at the head of every task queue.
-            Set the currently resumed thread's priority to highest priority and put it in the appropriate task queue*/
+            Set the currently resumed thread's priority to highest priority(this is achieved by setting the exisiting highest priority+1) 
+            and put it in the appropriate task queue*/
+            List<ThreadCB> threadList = taskTable.get(task.getID());
+            int highestPriority = (threadList.get(0)).getPriority();//Set initially to the priority of the thread at the head of the current task queue
+
+            for(List<ThreadCB> taskQueue: taskTable.values()){
+                ThreadCB thread = taskQueue.get(0);
+                int priority = thread.getPriority();
+                if(priority>highestPriority)
+                    highestPriority = priority;
+            }
+
+            this.setPriority(highestPriority+1);
+
+            //Put this thread at the head of the current task queue
+            threadList.add(0,this);
+            //Set the status to ready
+            this.setStatus(ThreadReady);
         }
+
+        ThreadCB.dispatch();
 
     }
 

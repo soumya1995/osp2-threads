@@ -1,6 +1,6 @@
 Sim: 0 [EventEngine.EventDriver]  
-	Simulation Start Time: Mon Mar 05 00:33:23 EST 2018
-	Parameter file: Misc\params.osp
+	Simulation Start Time: Mon Mar 05 14:26:45 EST 2018
+	Parameter file: D:\CSE 306\Threads\Misc\params.osp
 
 	Legend:
 	  Thread(X:Y/S) means: thread X of task Y, status=S
@@ -3519,8 +3519,8 @@ The suspended  RRBs:
 -----------------------------------------------
 
 Sim: 250006 [EventEngine.EventDriver]  
-	Simulation End Time: Mon Mar 05 00:33:25 EST 2018
+	Simulation End Time: Mon Mar 05 14:26:47 EST 2018
 
 Sim: 250006 [Utilities.Simulation]  
-	Elapsed time: 2 seconds
+	Elapsed time: 1 seconds
 

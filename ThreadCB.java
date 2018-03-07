@@ -32,8 +32,11 @@ import java.util.*;
 public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
 {   
 
-    private static HashMap<Integer, List<ThreadCB>> taskTable; //TaskTable has linked list which acts as the ready queue
-    private long entryTimeInQueue;
+    private static HashMap<Integer, List<ThreadCB>> taskTable; //TaskTable has linked list which has tasks with their corresponding threads
+    private static List<ThreadCB> readyQueue;
+    private long waitEntry = 0; //STORE WHEN THE THREAD ENTERED THREADWAITING STATE
+    private long waitTime = 0; //STORE THE TOTAL WAITING TIME OF THREAD IN BLOCKED STATE
+
 
 
     /*
@@ -64,8 +67,9 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
     */
     public static void init()
     {
-        // your code goes here
+        
         taskTable = new HashMap<Integer, List<ThreadCB>>();
+        readyQueue = new ArrayList<ThreadCB>();
 
     }
 
@@ -108,22 +112,20 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
         newThread.setStatus(ThreadReady); //Set status to thread ready
 
         /*Put the thread in the TaskTable
-        TaskTable has linked list which acts as the ready queue; the head of the queue has the highest priority thread in the group 
-        i.e. in that task*/
+        TaskTable has linked list which stores all the threads in a particular task*/
         List<ThreadCB> threadList = taskTable.get(task.getID());
         if(threadList == null)
             taskTable.put(task.getID(), threadList = new ArrayList<ThreadCB>());
         threadList.add(newThread);
 
-        //Store the time when a thread was inserted in the ready queue
-        newThread.entryTimeInQueue = HClock.get();
 
         //Set priority of the newly created thread
-        double priority = (1.5*(HClock.get()-newThread.getEntryTimeInQueue()))-(newThread.getTimeOnCPU())-(0.3*getAllCPUTime(task));
+        long waitReady = HTimer.get()-newThread.getWaitTime()-newThread.getTimeOnCPU();
+        double priority = (1.5*Math.toIntExact(waitReady)) - (newThread.getTimeOnCPU())-(0.3*getAllCPUTime(task));
         newThread.setPriority((int)priority);
-
-        //After assigning priority put the thread in the apporiate place in the queue
-        Collections.sort(threadList, Collections.reverseOrder());
+        readyQueue.add(newThread);
+        calculatePriorityQueue();
+        Collections.sort(readyQueue, Collections.reverseOrder());
 
         ThreadCB.dispatch();
         return newThread;
@@ -149,11 +151,14 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
         int status = this.getStatus();
         TaskCB task = this.getTask();
 
+        List<ThreadCB> threadList = taskTable.get(task.getID());
+        threadList.remove(this); //Remove the thread from ready queue
+        task.removeThread(this);
+       
+
         //Thread is in the ready queue
         if(status == ThreadReady){
-            List<ThreadCB> threadList = taskTable.get(task.getID());
-            threadList.remove(this); //Remove the thread from ready queue
-            task.removeThread(this);
+             readyQueue.remove(this);
         }
 
         if(status == ThreadRunning){
@@ -163,7 +168,7 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
             MMU.setPTBR(null);
         }
         //Thread is suspended or waiting for I/O
-        if(status == ThreadWaiting){
+        if(status >= ThreadWaiting){
             for(int i=0; i< Device.getTableSize();i++){
                 Device device = Device.get(i);
                 device.cancelPendingIO(this);
@@ -203,15 +208,19 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
     public void do_suspend(Event event)
     {
         int status = this.getStatus();
-
+        int changed = 0;
         if(status == ThreadRunning){
+
+            this.setWaitEntry(HTimer.get());//Set the entry time to waiting state
+            
             this.setStatus(ThreadWaiting);
             PageTable pageTable= MMU.getPTBR();
             TaskCB currentTask = pageTable.getTask();
             currentTask.setCurrentThread(null);
             MMU.setPTBR(null);
+            changed = 1;
         }
-        else if(status >= ThreadWaiting)
+        else if(status >= ThreadWaiting && changed!=1)
             this.setStatus(status+1);
 
         //Put thread in the appropriate waiting queue of the event
@@ -238,30 +247,26 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
         if(status > ThreadWaiting)
             this.setStatus(status-1);
         else if(status == ThreadWaiting){
+
+            this.setWaitTime(HTimer.get());//Set the time when the thread got out of the waiting state and calculate the waiting time
+
+            //Calculate priority
             TaskCB task = this.getTask();
+            long waitReady = HTimer.get()-this.getWaitTime()-this.getTimeOnCPU();
+            double priority = (1.5*Math.toIntExact(waitReady)) - (this.getTimeOnCPU())-(0.3*getAllCPUTime(task));
+            this.setPriority((int)priority);
 
-            /*Traverse through all the task(i.e. the hashmap) and look at the head of every task queue.
-            Set the currently resumed thread's priority to highest priority(this is achieved by setting the exisiting highest priority+1) 
-            and put it in the appropriate task queue*/
-            List<ThreadCB> threadList = taskTable.get(task.getID());
-            int highestPriority = (threadList.get(0)).getPriority();//Set initially to the priority of the thread at the head of the current task queue
+            //Put it in the ready queue
+            calculatePriorityQueue();
+            readyQueue.add(this);
+            Collections.sort(readyQueue, Collections.reverseOrder());
 
-            for(List<ThreadCB> taskQueue: taskTable.values()){
-                ThreadCB thread = taskQueue.get(0);
-                int priority = thread.getPriority();
-                if(priority>highestPriority)
-                    highestPriority = priority;
-            }
-
-            this.setPriority(highestPriority+1);
-
-            //Put this thread at the head of the current task queue
-            threadList.add(0,this);
             //Set the status to ready
             this.setStatus(ThreadReady);
         }
 
         ThreadCB.dispatch();
+
 
     }
 
@@ -280,11 +285,74 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
     */
     public static int do_dispatch()
     {
-        // your code goes here
-        
-        return 0;
+        ThreadCB runThread = null;
 
+        try{ //If the CPU is ideal
+            PageTable pageTable= MMU.getPTBR();
+            TaskCB currentTask = pageTable.getTask();
+            runThread = currentTask.getCurrentThread();
+
+        }
+
+        catch(NullPointerException ex){
+            
+        }
+
+        if(runThread != null){
+            TaskCB currentTask = runThread.getTask();
+            currentTask.setCurrentThread(null);
+            MMU.setPTBR(null);
+
+            //Calculate priority
+            TaskCB task = runThread.getTask();
+            long waitReady = HTimer.get()-runThread.getWaitTime()-runThread.getTimeOnCPU();
+            double priority = (1.5*Math.toIntExact(waitReady)) - (runThread.getTimeOnCPU())-(0.3*getAllCPUTime(task));
+            runThread.setPriority((int)priority);
+
+            
+            //Put it in the ready queue
+            calculatePriorityQueue();
+            runThread.setStatus(ThreadReady);
+            readyQueue.add(runThread);
+            Collections.sort(readyQueue, Collections.reverseOrder());
+
+        }
+
+        if(readyQueue.size() == 0){
+            MMU.setPTBR(null);
+            return FAILURE;
+        }
+
+        else{
+            ThreadCB thread = readyQueue.remove(0);
+
+            //Schedule the thread
+            TaskCB task = thread.getTask();
+            MMU.setPTBR(task.getPageTable());
+            task.setCurrentThread(thread);
+            thread.setStatus(ThreadRunning);
+
+            //Run for 100 time slice
+            HTimer.set(100);
+        }
+
+        return SUCCESS;
     }
+
+
+
+    private static void calculatePriorityQueue(){
+
+        for(ThreadCB thread:readyQueue){
+            //Calculate priority
+            TaskCB task = thread.getTask();
+            long waitReady = HTimer.get()-thread.getWaitTime()-thread.getTimeOnCPU();
+            double priority = (1.5*Math.toIntExact(waitReady)) - (thread.getTimeOnCPU())-(0.3*getAllCPUTime(task));
+            thread.setPriority((int)priority);
+        }
+    }
+
+    
 
     /*
         Called whenever we require to get the total CPU time all the threads in the same task.
@@ -303,14 +371,22 @@ public class ThreadCB extends IflThreadCB implements Comparable<ThreadCB>
         return totalTime;
     }
 
-    public long getEntryTimeInQueue(){
+    public long getWaitEntry(){
 
-        return this.entryTimeInQueue;
+        return this.waitEntry;
     }
 
-    public void setEntryTimeInQueue(long time){
+    public void setWaitEntry(long time){
 
-        this.entryTimeInQueue = time;
+        this.waitEntry = time;
+    }
+
+    public long getWaitTime(){
+        return this.waitTime;
+    }
+
+    public void setWaitTime(long time){
+        this.waitTime = this.waitTime + (time-this.getWaitEntry());
     }
 
     public int compareTo(ThreadCB thread){
